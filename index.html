@@ -48,6 +48,7 @@
   #skillName{font-weight:700; font-size:13px}
   #skillCd{font-size:11px; color:var(--muted); margin-top:2px}
   #skillCharge{font-size:11px; margin-top:3px; font-weight:700}
+  #weaponInfo{font-size:11px; margin-top:4px; color:var(--gold); font-weight:700}
   .hint{position:absolute; bottom:10px; left:12px; right:12px; color:#c9cdf0aa;
     font-size:11px; text-align:center; text-shadow:0 1px 2px #000}
   #toasts{position:absolute; top:70px; left:0; right:0; text-align:center; z-index:5}
@@ -136,6 +137,7 @@
         <div id="skillName">기본 공격</div>
         <div id="skillCd">준비됨</div>
         <div id="skillCharge"></div>
+        <div id="weaponInfo">무기 없음</div>
       </div>
     </div>
     <div id="toasts"></div>
@@ -184,7 +186,7 @@
   <div id="inventory" class="overlay">
     <div class="card">
       <h2>🎒 인벤토리</h2>
-      <p>몬스터에게서 얻은 아이템</p>
+      <p>몬스터에게서 얻은 아이템 · <b style="color:var(--gold)">무기를 클릭하면 장착</b></p>
       <div id="invGrid"></div>
       <button class="btn ghost" id="invClose">닫기 (B)</button>
     </div>
@@ -254,6 +256,8 @@ const player = {
   level:1, exp:0, expNext:12,
   job:'none', // none / mage / warrior
   attack:10,
+  weaponBonus:0,        // 장착 무기 보너스 공격력
+  equippedWeapon:null,  // 장착 중인 무기 (sword / wand / null)
   mageCharge:0,         // 마법 연속 사용 카운트 (7회마다 초광역)
   z:0, vz:0,            // 점프 높이
   invuln:0,             // 무적 시간(회피)
@@ -263,11 +267,45 @@ const player = {
   hitFlash:0,
 };
 
-const inventory = {}; // name -> {icon, count}
-function addItem(name, icon){
-  if(!inventory[name]) inventory[name] = {icon, count:0};
-  inventory[name].count++;
+const inventory = {}; // kind -> {count}
+function addItem(kind){
+  if(!inventory[kind]) inventory[kind] = {count:0};
+  inventory[kind].count++;
   renderInventory();
+}
+
+// 실제 공격력 = 기본 + 장착 무기 보너스
+function atk(){ return player.attack + (player.weaponBonus||0); }
+
+// 무기 장착/해제 (인벤토리에서 아이템 클릭 시 호출)
+const WEAPONS = ['sword','wand'];
+function equipWeapon(kind){
+  if(!WEAPONS.includes(kind)) return;
+  if(!inventory[kind] || inventory[kind].count<=0) return;
+  if(player.equippedWeapon===kind){
+    player.equippedWeapon=null; toast('장착 해제');
+  } else {
+    player.equippedWeapon=kind;
+    toast((kind==='sword'?'⚔️ 검':'🪄 마법봉')+' 장착!');
+  }
+  recomputeWeaponBonus();
+  renderInventory();
+  sfx(620,0.06);
+}
+function recomputeWeaponBonus(){
+  let b=0;
+  if(player.equippedWeapon==='sword') b = 6 + (player.job==='warrior'?4:0); // 전사+검 시너지
+  else if(player.equippedWeapon==='wand') b = 6 + (player.job==='mage'?4:0); // 마법사+마법봉 시너지
+  player.weaponBonus = b;
+  updateWeaponHUD();
+}
+function updateWeaponHUD(){
+  const el=document.getElementById('weaponInfo');
+  if(!el) return;
+  if(player.equippedWeapon){
+    const d=ITEM_DEF[player.equippedWeapon];
+    el.textContent='무기 '+d.icon+' '+d.name+' (+'+player.weaponBonus+')';
+  } else el.textContent='무기 없음';
 }
 
 // ===================== 엔티티 배열 =====================
@@ -358,7 +396,7 @@ function basicAttack(){
   player.skillCd = 0.4; player.skillCdMax = 0.4;
   const cx = player.x + player.face.x*40, cy = player.y + player.face.y*40;
   effects.push({type:'slash', x:cx, y:cy, ang:Math.atan2(player.face.y,player.face.x), life:0.18, max:0.18});
-  hitArea(cx, cy, 46, player.attack, false);
+  hitArea(cx, cy, 46, atk(), false);
   sfx(360,0.05);
 }
 
@@ -388,18 +426,18 @@ function castLightning(){
   sfx(880,0.09,'square');
   if(target){
     if(target.elite){ startClash(target); return; }   // 스킬 클래시 발동!
-    target.takeDamage(player.attack*2.2, true);
+    target.takeDamage(atk()*2.2, true);
     // 주변 연쇄 번개
     for(const m of monsters){
       if(m===target) continue;
       if(dist(m.x,m.y,target.x,target.y) < 120){
         effects.push({type:'lightning', x1:target.x, y1:target.y, x2:m.x, y2:m.y, life:0.18, max:0.18});
         if(m.elite){ startClash(m); return; }
-        m.takeDamage(player.attack*1.2, true);
+        m.takeDamage(atk()*1.2, true);
       }
     }
   }
-  hitArea(tx,ty,70,player.attack*2.2,true); // 지점 광역
+  hitArea(tx,ty,70,atk()*2.2,true); // 지점 광역
 }
 
 // --- 마법사 궁극기: 초광역 번개 (7번째 마법마다 발동) ---
@@ -415,7 +453,7 @@ function superLightning(){
     if(dist(m.x,m.y,cx,cy) < 900){
       effects.push({type:'lightning', x1:cx, y1:cy-10, x2:m.x, y2:m.y, life:0.35, max:0.35});
       spawnParticles(m.x, m.y, '#8fd0ff', 10);
-      m.takeDamage(player.attack*4, true);  // 초강력 (엘리트도 즉시 강타)
+      m.takeDamage(atk()*4, true);  // 초강력 (엘리트도 즉시 강타)
     }
   }
 }
@@ -432,7 +470,7 @@ function swordSlam(){
   for(const m of monsters){
     if(dist(m.x,m.y,cx,cy) < 100){
       if(m.elite && !clashStarted){ clashStarted=true; startClash(m); }
-      else { m.takeDamage(player.attack*2.6, true); knockback(m, cx, cy, 220); }
+      else { m.takeDamage(atk()*2.6, true); knockback(m, cx, cy, 220); }
     }
   }
 }
@@ -545,15 +583,14 @@ function updateDrops(dt){
   }
 }
 function collectItem(kind){
-  const def = ITEM_DEF[kind];
   if(kind==='potion'){
     player.hp = clamp(player.hp+35, 0, player.maxHp);
     toast('🧪 물약 +35 HP');
     spawnParticles(player.x,player.y,'#7bf0a9',10);
   } else if(kind==='sword'){
-    player.attack += 2; addItem(def.name, def.icon); toast('⚔️ 검 획득! 공격 +2');
+    addItem('sword'); toast('⚔️ 검 획득! (B에서 클릭해 장착)');
   } else if(kind==='wand'){
-    player.attack += 2; addItem(def.name, def.icon); toast('🪄 마법봉 획득! 공격 +2');
+    addItem('wand'); toast('🪄 마법봉 획득! (B에서 클릭해 장착)');
   }
   sfx(660,0.08);
 }
@@ -597,6 +634,7 @@ function chooseJob(job){
   }
   document.getElementById('jobBadge').textContent = job==='mage'?'마법사':'전사';
   document.getElementById('jobBadge').style.color = job==='mage'?'var(--mage)':'var(--warrior)';
+  recomputeWeaponBonus(); // 전직 시 무기 시너지 반영
   sfx(600,0.15); setTimeout(()=>sfx(880,0.2),120);
 }
 
@@ -725,30 +763,41 @@ function closeSettings(){ GAME.state='playing';
 function renderInventory(){
   const grid=document.getElementById('invGrid');
   grid.innerHTML='';
-  const items=Object.entries(inventory);
+  const items=Object.entries(inventory).filter(([k,it])=>it.count>0);
   const slots=Math.max(12, items.length);
   for(let i=0;i<slots;i++){
     const s=document.createElement('div'); s.className='slot';
     if(items[i]){
-      const [name,it]=items[i];
-      s.innerHTML=`<div class="ic">${it.icon}</div><div class="ct">${it.count}</div>`;
-      s.title=name;
+      const [kind,it]=items[i];
+      const def=ITEM_DEF[kind];
+      s.innerHTML=`<div class="ic">${def.icon}</div><div class="ct">${it.count}</div>`;
+      s.title=def.name;
+      if(WEAPONS.includes(kind)){
+        s.classList.add('equipable');
+        if(player.equippedWeapon===kind){
+          s.classList.add('equipped');
+          s.insertAdjacentHTML('beforeend','<div class="eqbadge">장착중</div>');
+        }
+        s.onclick=()=>equipWeapon(kind);
+      }
     } else { s.classList.add('empty'); }
     grid.appendChild(s);
   }
+  updateWeaponHUD();
 }
 
 // ===================== 게임 시작 / 리셋 =====================
 function startGame(){
   Object.assign(player, {
     x:WORLD.w/2, y:WORLD.h/2, hp:100, maxHp:100, stamina:100, maxStamina:100,
-    level:1, exp:0, expNext:12, job:'none', attack:10, mageCharge:0, z:0, vz:0,
+    level:1, exp:0, expNext:12, job:'none', attack:10, weaponBonus:0, equippedWeapon:null, mageCharge:0, z:0, vz:0,
     invuln:0, stun:0, dashCd:0, dashTime:0, skillCd:0, skillCdMax:0.5, hitFlash:0,
     face:{x:0,y:1},
   });
   screenFlash=0;
   monsters=[]; drops=[]; effects=[]; floats=[]; particles=[];
   for(const k in inventory) delete inventory[k];
+  updateWeaponHUD();
   GAME.time=0; GAME.kills=0;
   GAME.state='playing';
   document.getElementById('jobBadge').textContent='모험가';
