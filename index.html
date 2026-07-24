@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>이세계 판타지 RPG — 마법사 & 전사</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
     --bg:#0e1020; --panel:#1a1d33; --panel2:#232744; --line:#3a3f66;
@@ -114,6 +115,24 @@
   #qteTimer{font-size:14px; color:var(--muted)}
   .clashsub{color:var(--muted); font-size:13px}
 
+  /* Leaderboard (Supabase) */
+  .lb{margin-top:16px; text-align:left; background:var(--panel2); border:1px solid var(--line);
+    border-radius:12px; padding:10px 12px; max-height:180px; overflow-y:auto}
+  .lb-title{font-size:12px; color:var(--gold); font-weight:800; margin-bottom:6px; text-align:center}
+  .lb-row{display:grid; grid-template-columns:28px 1fr auto; gap:8px; align-items:center;
+    padding:4px 2px; font-size:13px; border-bottom:1px solid #ffffff11}
+  .lb-row:last-child{border-bottom:none}
+  .lb-rank{color:var(--muted); font-weight:800; text-align:center}
+  .lb-row:nth-child(1) .lb-rank{color:var(--gold)}
+  .lb-name{color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .lb-score{color:var(--exp); font-weight:800}
+  .lb-empty{color:var(--muted); font-size:12px; text-align:center; padding:8px}
+  .lb-save{display:flex; gap:8px; margin-top:14px; justify-content:center}
+  .lb-save input{flex:1; max-width:200px; padding:10px 12px; border-radius:10px;
+    border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-size:14px}
+  .lb-save input::placeholder{color:var(--muted)}
+  .lb-save .btn{margin-top:0}
+
   @media (max-width:520px){
     .card{padding:22px}
     .jobs{flex-direction:column}
@@ -158,6 +177,7 @@
         <span>인벤토리</span><span><b>B</b></span>
         <span>설정</span><span><b>ESC</b></span>
       </div>
+      <div class="lb"><div class="lb-title">🏆 랭킹 TOP 10</div><div id="lbTitle"><div class="lb-empty">불러오는 중…</div></div></div>
       <button class="btn" id="startBtn">모험 시작</button>
     </div>
   </div>
@@ -225,13 +245,52 @@
     <div class="card">
       <h1>💀 쓰러졌습니다</h1>
       <p id="goStat">도달 레벨 · 처치 수</p>
-      <button class="btn" id="reviveBtn">다시 시작</button>
+      <div class="lb-save">
+        <input id="nickInput" maxlength="12" placeholder="닉네임 (개인정보 X)" autocomplete="off">
+        <button class="btn" id="saveScoreBtn">랭킹 등록</button>
+      </div>
+      <div class="lb"><div class="lb-title">🏆 랭킹 TOP 10</div><div id="lbGameover"><div class="lb-empty">—</div></div></div>
+      <button class="btn ghost" id="reviveBtn">다시 시작</button>
     </div>
   </div>
 </div>
 
 <script>
 "use strict";
+
+// ===================== Supabase (랭킹 저장/조회) =====================
+// ▼▼ 본인 Supabase 프로젝트 값으로 교체하세요 (Supabase 대시보드 → Settings → API) ▼▼
+//   · anon(public) 키는 클라이언트에 노출돼도 안전한 "공개 키"입니다 (RLS로 보호).
+//   · ⚠️ service_role(secret) 키는 절대 여기에 넣지 마세요.
+const SUPABASE_URL = '';        // 예: https://abcd1234.supabase.co
+const SUPABASE_ANON_KEY = '';   // 예: eyJhbGciOiJIUzI1NiIsInR5cCI6...
+let sb = null;
+if(SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase){
+  try{ sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); }
+  catch(e){ console.warn('Supabase init 실패', e); }
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+async function saveScore(nickname, score){
+  if(!sb) return false;
+  try{
+    const { error } = await sb.from('scores').insert({ nickname, score, level: player.level, kills: GAME.kills });
+    if(error) throw error;
+    return true;
+  }catch(e){ console.warn('점수 저장 실패', e); return false; }
+}
+async function loadLeaderboard(elId){
+  const el = document.getElementById(elId);
+  if(!el) return;
+  if(!sb){ el.innerHTML = '<div class="lb-empty">Supabase 미설정 — 코드 상단 SUPABASE_URL/ANON_KEY 입력</div>'; return; }
+  el.innerHTML = '<div class="lb-empty">불러오는 중…</div>';
+  try{
+    const { data, error } = await sb.from('scores').select('nickname,score').order('score',{ascending:false}).limit(10);
+    if(error) throw error;
+    if(!data || !data.length){ el.innerHTML = '<div class="lb-empty">아직 기록이 없어요. 첫 도전자가 되어보세요!</div>'; return; }
+    el.innerHTML = data.map((r,i)=>`<div class="lb-row"><span class="lb-rank">${i+1}</span><span class="lb-name">${escapeHtml(r.nickname)}</span><span class="lb-score">${r.score}</span></div>`).join('');
+  }catch(e){ el.innerHTML = '<div class="lb-empty">랭킹 불러오기 실패 (테이블/정책 확인)</div>'; console.warn(e); }
+}
+
 // ===================== 기본 설정 =====================
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
@@ -709,9 +768,13 @@ function damagePlayer(dmg){
 }
 function gameOver(){
   GAME.state='gameover';
+  GAME.lastScore = GAME.kills*100 + (player.level-1)*50 + Math.floor(GAME.time);
   document.getElementById('goStat').textContent =
-    `도달 레벨 ${player.level} · 처치 ${GAME.kills}마리 · 시간 ${Math.floor(GAME.time)}초`;
+    `점수 ${GAME.lastScore}점 · 레벨 ${player.level} · 처치 ${GAME.kills}마리 · 시간 ${Math.floor(GAME.time)}초`;
+  const btn=document.getElementById('saveScoreBtn');
+  btn.disabled=false; btn.textContent='랭킹 등록';
   document.getElementById('gameover').classList.add('show');
+  loadLeaderboard('lbGameover');
 }
 
 // ===================== 이펙트 / 파티클 =====================
@@ -822,6 +885,20 @@ document.getElementById('sndBtn').onclick=()=>{
   document.getElementById('sndState').textContent=GAME.sound?'켜짐':'꺼짐';
   document.getElementById('sndBtn').textContent=GAME.sound?'사운드 끄기':'사운드 켜기';
 };
+// 랭킹 등록 버튼
+document.getElementById('saveScoreBtn').onclick=async ()=>{
+  const input=document.getElementById('nickInput');
+  const btn=document.getElementById('saveScoreBtn');
+  const name=(input.value||'').trim();
+  if(!name){ input.focus(); toast('닉네임을 입력하세요'); return; }
+  if(!sb){ toast('Supabase 미설정'); return; }
+  btn.disabled=true; btn.textContent='저장 중…';
+  const ok=await saveScore(name, GAME.lastScore||0);
+  if(ok){ btn.textContent='등록됨 ✓'; toast('🏆 랭킹에 등록!'); loadLeaderboard('lbGameover'); loadLeaderboard('lbTitle'); }
+  else { btn.disabled=false; btn.textContent='랭킹 등록'; toast('저장 실패 (테이블/정책 확인)'); }
+};
+// 시작 화면 랭킹 로드
+loadLeaderboard('lbTitle');
 
 // ===================== 업데이트 =====================
 let spawnTimer=0;
