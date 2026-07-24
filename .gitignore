@@ -1,0 +1,17 @@
+# ===== 환경변수 / 비밀키 =====
+# (협업 규칙 9번: API 키와 환경변수는 GitHub에 올리지 않는다)
+.env
+.env.local
+.env.*.local
+
+# ===== 의존성 / 빌드 결과물 =====
+node_modules/
+dist/
+build/
+
+# ===== 에디터 / OS =====
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log

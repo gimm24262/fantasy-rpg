@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>이세계 판타지 RPG — 마법사 & 전사</title>
+<style>
+  :root{
+    --bg:#0e1020; --panel:#1a1d33; --panel2:#232744; --line:#3a3f66;
+    --ink:#eef0ff; --muted:#9aa0c8; --gold:#f4c95d; --hp:#e5484d; --mp:#4d7ce5;
+    --stam:#4de58a; --exp:#c48bff; --mage:#6db4ff; --warrior:#ff8a5c;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:radial-gradient(1200px 800px at 50% -10%, #1a1f3d 0%, var(--bg) 60%);
+    color:var(--ink); font-family:'Pretendard','Malgun Gothic',system-ui,sans-serif;
+    display:flex; align-items:center; justify-content:center; min-height:100%;
+    overflow:hidden; user-select:none; -webkit-user-select:none;
+  }
+  #stage{
+    position:relative; width:960px; max-width:100vw; aspect-ratio:960/600;
+    box-shadow:0 20px 60px rgba(0,0,0,.5); border-radius:14px; overflow:hidden;
+    border:1px solid var(--line); background:#0b1a12;
+  }
+  canvas{display:block; width:100%; height:100%; image-rendering:auto;}
+
+  /* ===== HUD ===== */
+  #hud{position:absolute; inset:0; pointer-events:none; font-size:13px}
+  .hud-tl{position:absolute; top:12px; left:12px; width:260px}
+  .bar{height:14px; border-radius:8px; background:#00000055; border:1px solid #ffffff22;
+    overflow:hidden; margin-top:5px; position:relative}
+  .bar > i{display:block; height:100%; width:50%; transition:width .12s linear}
+  .bar > span{position:absolute; inset:0; text-align:center; font-size:10px; line-height:14px;
+    color:#fff; text-shadow:0 1px 2px #000; letter-spacing:.3px}
+  .hp > i{background:linear-gradient(90deg,#ff6b6b,var(--hp))}
+  .mp > i{background:linear-gradient(90deg,#7aa4ff,var(--mp))}
+  .stam > i{background:linear-gradient(90deg,#7bf0a9,var(--stam))}
+  .exp > i{background:linear-gradient(90deg,#dcb0ff,var(--exp))}
+  .row{display:flex; align-items:center; gap:8px}
+  #lvBadge{background:var(--gold); color:#3a2c00; font-weight:800; border-radius:8px;
+    padding:2px 9px; font-size:13px}
+  #jobBadge{padding:2px 9px; border-radius:8px; font-weight:700; font-size:12px;
+    background:#ffffff18; border:1px solid #ffffff22}
+  .hud-tr{position:absolute; top:12px; right:12px; text-align:right}
+  #skillBox{background:#00000055; border:1px solid #ffffff22; border-radius:10px;
+    padding:8px 12px; min-width:120px}
+  #skillName{font-weight:700; font-size:13px}
+  #skillCd{font-size:11px; color:var(--muted); margin-top:2px}
+  #skillCharge{font-size:11px; margin-top:3px; font-weight:700}
+  .hint{position:absolute; bottom:10px; left:12px; right:12px; color:#c9cdf0aa;
+    font-size:11px; text-align:center; text-shadow:0 1px 2px #000}
+  #toasts{position:absolute; top:70px; left:0; right:0; text-align:center; z-index:5}
+  .toast{display:inline-block; background:#000000aa; border:1px solid var(--gold);
+    color:var(--gold); font-weight:700; padding:6px 16px; border-radius:20px;
+    margin:3px; font-size:14px; animation:pop .3s ease}
+  @keyframes pop{from{transform:scale(.7);opacity:0}to{transform:scale(1);opacity:1}}
+
+  /* ===== Overlays ===== */
+  .overlay{position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    background:#05070fcc; backdrop-filter:blur(3px); z-index:10; text-align:center; padding:20px}
+  .overlay.show{display:flex}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:18px;
+    padding:30px 34px; max-width:560px; width:100%; box-shadow:0 20px 50px #000a}
+  .card h1{font-size:30px; letter-spacing:-.5px; margin-bottom:6px}
+  .card h2{font-size:22px; margin-bottom:14px}
+  .card p{color:var(--muted); line-height:1.7; font-size:14px}
+  .btn{cursor:pointer; pointer-events:auto; border:none; border-radius:12px; padding:12px 22px;
+    font-size:15px; font-weight:700; background:var(--gold); color:#3a2c00; margin-top:16px;
+    transition:transform .08s}
+  .btn:hover{transform:translateY(-2px)}
+  .btn.ghost{background:#ffffff14; color:var(--ink); border:1px solid var(--line)}
+  .keys{display:inline-grid; grid-template-columns:auto auto; gap:6px 18px; text-align:left;
+    margin:16px auto 4px; font-size:13px; color:var(--ink)}
+  .keys b{color:var(--gold)}
+
+  /* Job change */
+  .jobs{display:flex; gap:16px; margin-top:20px}
+  .jobcard{flex:1; pointer-events:auto; cursor:pointer; border-radius:16px; padding:22px 16px;
+    border:2px solid var(--line); background:var(--panel2); transition:transform .1s,border-color .1s}
+  .jobcard:hover{transform:translateY(-4px)}
+  .jobcard.mage:hover{border-color:var(--mage)}
+  .jobcard.warrior:hover{border-color:var(--warrior)}
+  .jobcard .ic{font-size:48px}
+  .jobcard h3{font-size:20px; margin:8px 0 6px}
+  .jobcard.mage h3{color:var(--mage)} .jobcard.warrior h3{color:var(--warrior)}
+  .jobcard small{color:var(--muted); font-size:12px; line-height:1.5; display:block}
+  .pick{font-size:11px; color:var(--muted); margin-top:10px}
+
+  /* Inventory */
+  #invGrid{display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-top:18px}
+  .slot{aspect-ratio:1; border-radius:12px; background:var(--panel2); border:1px solid var(--line);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; position:relative}
+  .slot .ic{font-size:26px}
+  .slot .ct{position:absolute; bottom:3px; right:6px; font-size:11px; color:var(--gold); font-weight:800}
+  .slot.empty{opacity:.35}
+  .slot.equipable{cursor:pointer; pointer-events:auto}
+  .slot.equipable:hover{border-color:var(--gold); transform:translateY(-2px); transition:.1s}
+  .slot.equipped{border-color:var(--gold); box-shadow:0 0 0 2px var(--gold), 0 0 16px #f4c95d66}
+  .eqbadge{position:absolute; top:3px; left:4px; right:4px; text-align:center; font-size:9px;
+    color:#3a2c00; background:var(--gold); border-radius:6px; font-weight:800; line-height:1.5}
+
+  /* QTE clash */
+  #qte .card{max-width:420px}
+  #qteBarWrap{height:26px; border-radius:14px; background:#00000066; border:1px solid var(--line);
+    overflow:hidden; margin:18px 0 6px; position:relative}
+  #qteBar{height:100%; width:50%; background:linear-gradient(90deg,#ffd36b,#ff5c5c);
+    transition:width .08s linear}
+  #qteBar.good{background:linear-gradient(90deg,#7bf0a9,#39d98a)}
+  #qteMid{position:absolute; top:-4px; bottom:-4px; left:50%; width:2px; background:#ffffff55}
+  #qteKey{font-size:64px; font-weight:900; letter-spacing:2px; margin:8px 0 2px;
+    color:var(--gold); text-shadow:0 4px 12px #000}
+  #qteTimer{font-size:14px; color:var(--muted)}
+  .clashsub{color:var(--muted); font-size:13px}
+
+  @media (max-width:520px){
+    .card{padding:22px}
+    .jobs{flex-direction:column}
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv" width="960" height="600"></canvas>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div class="hud-tl">
+      <div class="row"><span id="lvBadge">Lv 1</span><span id="jobBadge">모험가</span></div>
+      <div class="bar hp"><i id="hpFill"></i><span id="hpTxt">100/100</span></div>
+      <div class="bar stam"><i id="stamFill"></i><span>기력</span></div>
+      <div class="bar exp"><i id="expFill"></i><span id="expTxt">EXP</span></div>
+    </div>
+    <div class="hud-tr">
+      <div id="skillBox">
+        <div id="skillName">기본 공격</div>
+        <div id="skillCd">준비됨</div>
+        <div id="skillCharge"></div>
+      </div>
+    </div>
+    <div id="toasts"></div>
+    <div class="hint">이동 <b>WASD</b> · 점프 <b>Space</b> · 대쉬 <b>Q</b> · 달리기 <b>Shift</b> · 스킬 <b>R/E</b> · 가방 <b>B</b> · 설정 <b>ESC</b></div>
+  </div>
+
+  <!-- Title -->
+  <div id="title" class="overlay show">
+    <div class="card">
+      <h1>⚔️ 이세계 판타지 RPG 🔮</h1>
+      <p>몬스터를 처치해 레벨을 올리고, <b style="color:var(--gold)">5레벨</b>에서 <b style="color:var(--mage)">마법사</b> 또는 <b style="color:var(--warrior)">전사</b>로 전직하세요.<br>스킬이 부딪히면 <b>클래시</b>가 발생합니다!</p>
+      <div class="keys">
+        <span>이동</span><span><b>W A S D</b> (대각선 가능)</span>
+        <span>점프 / 회피</span><span><b>Space</b></span>
+        <span>대쉬</span><span><b>Q</b></span>
+        <span>달리기</span><span><b>Shift</b></span>
+        <span>스킬 사용</span><span><b>R</b> 또는 <b>E</b></span>
+        <span>인벤토리</span><span><b>B</b></span>
+        <span>설정</span><span><b>ESC</b></span>
+      </div>
+      <button class="btn" id="startBtn">모험 시작</button>
+    </div>
+  </div>
+
+  <!-- Job change -->
+  <div id="jobchange" class="overlay">
+    <div class="card">
+      <h2>⭐ 전직! — 직업을 선택하세요</h2>
+      <p>5레벨에 도달했습니다. 직업을 고르면 고유 스킬을 얻습니다.</p>
+      <div class="jobs">
+        <div class="jobcard mage" id="pickMage">
+          <div class="ic">🔮</div><h3>마법사</h3>
+          <small>번개 능력<br>먼 거리의 적을<br>번개로 강타</small>
+          <div class="pick">클릭 또는 [1]</div>
+        </div>
+        <div class="jobcard warrior" id="pickWarrior">
+          <div class="ic">⚔️</div><h3>전사</h3>
+          <small>칼로 내려찍기<br>근접 광역<br>강력한 일격</small>
+          <div class="pick">클릭 또는 [2]</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Inventory -->
+  <div id="inventory" class="overlay">
+    <div class="card">
+      <h2>🎒 인벤토리</h2>
+      <p>몬스터에게서 얻은 아이템</p>
+      <div id="invGrid"></div>
+      <button class="btn ghost" id="invClose">닫기 (B)</button>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div id="settings" class="overlay">
+    <div class="card">
+      <h2>⚙️ 설정</h2>
+      <div class="keys" style="grid-template-columns:auto auto">
+        <span>사운드</span><span><b id="sndState">켜짐</b></span>
+        <span>처치 수</span><span><b id="killStat">0</b></span>
+        <span>플레이 시간</span><span><b id="timeStat">0초</b></span>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <button class="btn" id="resumeBtn">계속하기 (ESC)</button>
+        <button class="btn ghost" id="sndBtn">사운드 끄기</button>
+        <button class="btn ghost" id="restartBtn">다시 시작</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QTE clash -->
+  <div id="qte" class="overlay">
+    <div class="card">
+      <h2>⚡ 스킬 클래시! ⚡</h2>
+      <p class="clashsub">화면의 <b>WASD</b> 키를 정확히 누르세요! 맞으면 ↑ 틀리면 ↓</p>
+      <div id="qteBarWrap"><div id="qteBar"></div><div id="qteMid"></div></div>
+      <div id="qteKey">W</div>
+      <div id="qteTimer">10.0초</div>
+    </div>
+  </div>
+
+  <!-- Game over -->
+  <div id="gameover" class="overlay">
+    <div class="card">
+      <h1>💀 쓰러졌습니다</h1>
+      <p id="goStat">도달 레벨 · 처치 수</p>
+      <button class="btn" id="reviveBtn">다시 시작</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+// ===================== 기본 설정 =====================
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const W = cv.width, H = cv.height;
+const WORLD = { w: 2400, h: 1800 };
+
+const clamp = (v,a,b)=> v<a?a : v>b?b : v;
+const dist = (ax,ay,bx,by)=> Math.hypot(ax-bx, ay-by);
+const rand = (a,b)=> a + Math.random()*(b-a);
+const randi = (a,b)=> Math.floor(rand(a,b+1));
+const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+
+// 게임 상태: title, playing, jobchange, inventory, settings, qte, gameover
+const GAME = { state:'title', time:0, kills:0, sound:true };
+
+// ===================== 플레이어 =====================
+const player = {
+  x: WORLD.w/2, y: WORLD.h/2, r: 18,
+  speed: 190, face:{x:0,y:1},
+  hp:100, maxHp:100,
+  stamina:100, maxStamina:100,
+  level:1, exp:0, expNext:12,
+  job:'none', // none / mage / warrior
+  attack:10,
+  mageCharge:0,         // 마법 연속 사용 카운트 (7회마다 초광역)
+  z:0, vz:0,            // 점프 높이
+  invuln:0,             // 무적 시간(회피)
+  stun:0,               // 기절 시간
+  dashCd:0, dashTime:0, dashDir:{x:0,y:1},
+  skillCd:0, skillCdMax:0.5,
+  hitFlash:0,
+};
+
+const inventory = {}; // name -> {icon, count}
+function addItem(name, icon){
+  if(!inventory[name]) inventory[name] = {icon, count:0};
+  inventory[name].count++;
+  renderInventory();
+}
+
+// ===================== 엔티티 배열 =====================
+let monsters = [];
+let drops = [];       // 바닥의 아이템
+let effects = [];     // 시각 효과
+let floats = [];      // 데미지 숫자
+let particles = [];
+const camera = {x:0, y:0};
+
+// ===================== 입력 =====================
+const keys = {};
+const GAME_KEYS = new Set(['KeyW','KeyA','KeyS','KeyD','Space','ShiftLeft','ShiftRight',
+  'KeyR','KeyE','KeyQ','KeyB','Escape','Digit1','Digit2','Enter']);
+
+window.addEventListener('keydown', e=>{
+  if(GAME_KEYS.has(e.code)) e.preventDefault();
+  const wasUp = !keys[e.code];
+  keys[e.code] = true;
+  if(e.repeat) return;
+  if(wasUp) onKeyDown(e.code);
+});
+window.addEventListener('keyup', e=>{ keys[e.code] = false; });
+// 창 포커스 잃으면 키 초기화(끼임 방지)
+window.addEventListener('blur', ()=>{ for(const k in keys) keys[k]=false; });
+
+function onKeyDown(code){
+  const s = GAME.state;
+  if(s==='title'){ if(code==='Enter'||code==='Space') startGame(); return; }
+  if(s==='gameover'){ if(code==='Enter'||code==='Space') startGame(); return; }
+  if(s==='jobchange'){
+    if(code==='Digit1') chooseJob('mage');
+    if(code==='Digit2') chooseJob('warrior');
+    return;
+  }
+  if(s==='inventory'){ if(code==='KeyB'||code==='Escape') closeInventory(); return; }
+  if(s==='settings'){ if(code==='Escape') closeSettings(); return; }
+  if(s==='qte'){
+    if(['KeyW','KeyA','KeyS','KeyD'].includes(code)) qteInput(code[3]); // 'W'/'A'/'S'/'D'
+    return;
+  }
+  if(s==='playing'){
+    if(player.stun>0) return;
+    if(code==='Space') doJump();
+    else if(code==='KeyQ') doDash();
+    else if(code==='KeyR'||code==='KeyE') useSkill();
+    else if(code==='KeyB') openInventory();
+    else if(code==='Escape') openSettings();
+  }
+}
+
+// ===================== 액션 =====================
+function doJump(){
+  if(player.z===0 && player.vz===0){
+    player.vz = 430;
+    player.invuln = Math.max(player.invuln, 0.45); // 점프 중 회피
+    sfx(520,0.08);
+  }
+}
+function doDash(){
+  if(player.dashCd>0 || player.stamina<25) return;
+  let d = getMoveDir();
+  if(d.x===0 && d.y===0) d = {...player.face};
+  player.dashDir = d;
+  player.dashTime = 0.16;
+  player.dashCd = 0.9;
+  player.stamina -= 25;
+  player.invuln = Math.max(player.invuln, 0.2);
+  sfx(300,0.1);
+}
+function getMoveDir(){
+  let mx=0,my=0;
+  if(keys['KeyW'])my-=1; if(keys['KeyS'])my+=1;
+  if(keys['KeyA'])mx-=1; if(keys['KeyD'])mx+=1;
+  if(mx||my){ const l=Math.hypot(mx,my); mx/=l; my/=l; }
+  return {x:mx,y:my};
+}
+
+function useSkill(){
+  if(player.skillCd>0) return;
+  if(player.job==='mage') castLightning();
+  else if(player.job==='warrior') swordSlam();
+  else basicAttack();
+}
+
+// --- 기본 공격 (전직 전) ---
+function basicAttack(){
+  player.skillCd = 0.4; player.skillCdMax = 0.4;
+  const cx = player.x + player.face.x*40, cy = player.y + player.face.y*40;
+  effects.push({type:'slash', x:cx, y:cy, ang:Math.atan2(player.face.y,player.face.x), life:0.18, max:0.18});
+  hitArea(cx, cy, 46, player.attack, false);
+  sfx(360,0.05);
+}
+
+// --- 마법사: 번개 ---
+function castLightning(){
+  player.skillCd = 0.7; player.skillCdMax = 0.7;
+  // 7번째 마법은 초광역 스킬로 변한다
+  player.mageCharge++;
+  if(player.mageCharge >= 7){
+    player.mageCharge = 0;
+    superLightning();
+    return;
+  }
+  // 정면 방향에서 가장 가까운 몬스터를 타깃, 없으면 정면 지점
+  let target = null, best = 620;
+  for(const m of monsters){
+    const dx=m.x-player.x, dy=m.y-player.y;
+    const d = Math.hypot(dx,dy);
+    if(d>best) continue;
+    // 정면 반경(약 90도) 안에 있는지
+    const dot = (dx*player.face.x + dy*player.face.y)/(d||1);
+    if(dot > 0.3){ best = d; target = m; }
+  }
+  const tx = target ? target.x : player.x + player.face.x*300;
+  const ty = target ? target.y : player.y + player.face.y*300;
+  effects.push({type:'lightning', x1:player.x, y1:player.y-10, x2:tx, y2:ty, life:0.22, max:0.22});
+  sfx(880,0.09,'square');
+  if(target){
+    if(target.elite){ startClash(target); return; }   // 스킬 클래시 발동!
+    target.takeDamage(player.attack*2.2, true);
+    // 주변 연쇄 번개
+    for(const m of monsters){
+      if(m===target) continue;
+      if(dist(m.x,m.y,target.x,target.y) < 120){
+        effects.push({type:'lightning', x1:target.x, y1:target.y, x2:m.x, y2:m.y, life:0.18, max:0.18});
+        if(m.elite){ startClash(m); return; }
+        m.takeDamage(player.attack*1.2, true);
+      }
+    }
+  }
+  hitArea(tx,ty,70,player.attack*2.2,true); // 지점 광역
+}
+
+// --- 마법사 궁극기: 초광역 번개 (7번째 마법마다 발동) ---
+function superLightning(){
+  player.skillCd = 0.9; player.skillCdMax = 0.9;
+  addShake(14);
+  screenFlash = 0.4;
+  toast('⚡⚡ 초광역 번개 폭발! ⚡⚡');
+  sfx(1000,0.2,'square'); setTimeout(()=>sfx(1320,0.2,'square'),80);
+  const cx=player.x, cy=player.y;
+  // 넓은 범위의 모든 몬스터를 강타 (사망 시 splice 안전을 위해 복사본 순회)
+  for(const m of [...monsters]){
+    if(dist(m.x,m.y,cx,cy) < 900){
+      effects.push({type:'lightning', x1:cx, y1:cy-10, x2:m.x, y2:m.y, life:0.35, max:0.35});
+      spawnParticles(m.x, m.y, '#8fd0ff', 10);
+      m.takeDamage(player.attack*4, true);  // 초강력 (엘리트도 즉시 강타)
+    }
+  }
+}
+
+// --- 전사: 칼 내려찍기 ---
+function swordSlam(){
+  player.skillCd = 0.6; player.skillCdMax = 0.6;
+  const cx = player.x + player.face.x*46, cy = player.y + player.face.y*46;
+  effects.push({type:'slam', x:cx, y:cy, r:10, maxR:100, life:0.32, max:0.32});
+  addShake(6);
+  sfx(160,0.14,'sawtooth');
+  // 광역 내려찍기 (엘리트는 클래시)
+  let clashStarted=false;
+  for(const m of monsters){
+    if(dist(m.x,m.y,cx,cy) < 100){
+      if(m.elite && !clashStarted){ clashStarted=true; startClash(m); }
+      else { m.takeDamage(player.attack*2.6, true); knockback(m, cx, cy, 220); }
+    }
+  }
+}
+
+// 원형 범위 데미지 (엘리트 클래시 포함)
+function hitArea(cx,cy,r,dmg,crit){
+  for(const m of monsters){
+    if(dist(m.x,m.y,cx,cy) < r + m.r){
+      if(m.elite){ startClash(m); return; }
+      m.takeDamage(dmg, crit);
+    }
+  }
+}
+function knockback(m, fromX, fromY, force){
+  const d = dist(m.x,m.y,fromX,fromY)||1;
+  m.x += (m.x-fromX)/d * force*0.05;
+  m.y += (m.y-fromY)/d * force*0.05;
+  m.x = clamp(m.x, m.r, WORLD.w-m.r);
+  m.y = clamp(m.y, m.r, WORLD.h-m.r);
+}
+
+// ===================== 몬스터 =====================
+class Monster{
+  constructor(x,y,elite){
+    this.x=x; this.y=y; this.elite=elite;
+    this.r = elite?26:16;
+    this.maxHp = elite? 60 + player.level*10 : 20 + player.level*4;
+    this.hp = this.maxHp;
+    this.speed = elite? 70 : rand(55,85);
+    this.dmg = elite? 14 : 8;
+    this.atkCd = 0;
+    this.hitFlash = 0;
+    this.wob = rand(0,6.28);
+  }
+  takeDamage(dmg, crit){
+    dmg = Math.round(dmg);
+    this.hp -= dmg;
+    this.hitFlash = 0.12;
+    floats.push({x:this.x, y:this.y-this.r-6, text:String(dmg), life:0.7, vy:-40,
+      color: crit?'#ffd36b':'#ffffff', size: crit?20:15});
+    spawnParticles(this.x,this.y, crit?'#ffd36b':'#ff8080', 6);
+    if(this.hp<=0) this.die();
+  }
+  die(){
+    const i = monsters.indexOf(this);
+    if(i>=0) monsters.splice(i,1);
+    GAME.kills++;
+    spawnParticles(this.x,this.y,'#ffd36b',16);
+    gainExp(this.elite? 22 : 6);
+    // 드롭
+    const roll = Math.random();
+    if(this.elite){
+      dropItem(this.x,this.y, Math.random()<0.5?'sword':'wand');
+      if(Math.random()<0.6) dropItem(this.x+20,this.y, 'potion');
+    } else if(roll<0.22){
+      dropItem(this.x,this.y, pick(['sword','wand','potion']));
+    }
+  }
+  update(dt){
+    if(this.hitFlash>0) this.hitFlash-=dt;
+    this.wob += dt*3;
+    const d = dist(this.x,this.y,player.x,player.y);
+    if(d < 360){ // 추적
+      const dx=(player.x-this.x)/(d||1), dy=(player.y-this.y)/(d||1);
+      this.x += dx*this.speed*dt;
+      this.y += dy*this.speed*dt;
+    } else { // 배회
+      this.x += Math.cos(this.wob)*this.speed*0.3*dt;
+      this.y += Math.sin(this.wob*0.7)*this.speed*0.3*dt;
+    }
+    this.x = clamp(this.x, this.r, WORLD.w-this.r);
+    this.y = clamp(this.y, this.r, WORLD.h-this.r);
+    // 접촉 데미지
+    if(this.atkCd>0) this.atkCd-=dt;
+    if(d < this.r+player.r && this.atkCd<=0 && player.z<12){
+      if(player.invuln<=0){
+        damagePlayer(this.dmg);
+        knockback(this, player.x, player.y, -140); // 몬스터가 밀림
+      }
+      this.atkCd = 0.8;
+    }
+  }
+}
+function spawnMonster(){
+  if(monsters.length >= 9) return;
+  let x,y,tries=0;
+  do{ x=rand(60,WORLD.w-60); y=rand(60,WORLD.h-60); tries++; }
+  while(dist(x,y,player.x,player.y)<360 && tries<20);
+  const elite = Math.random()<0.22 && player.level>=3;
+  monsters.push(new Monster(x,y,elite));
+}
+
+// ===================== 드롭 / 아이템 =====================
+const ITEM_DEF = {
+  sword:{icon:'⚔️', name:'검'},
+  wand:{icon:'🪄', name:'마법봉'},
+  potion:{icon:'🧪', name:'물약'},
+};
+function dropItem(x,y,kind){
+  drops.push({x:clamp(x,20,WORLD.w-20), y:clamp(y,20,WORLD.h-20), kind, bob:rand(0,6.28), life:20});
+}
+function updateDrops(dt){
+  for(let i=drops.length-1;i>=0;i--){
+    const d = drops[i];
+    d.bob += dt*4; d.life -= dt;
+    if(dist(d.x,d.y,player.x,player.y) < player.r+22){
+      collectItem(d.kind);
+      drops.splice(i,1);
+    } else if(d.life<=0){ drops.splice(i,1); }
+  }
+}
+function collectItem(kind){
+  const def = ITEM_DEF[kind];
+  if(kind==='potion'){
+    player.hp = clamp(player.hp+35, 0, player.maxHp);
+    toast('🧪 물약 +35 HP');
+    spawnParticles(player.x,player.y,'#7bf0a9',10);
+  } else if(kind==='sword'){
+    player.attack += 2; addItem(def.name, def.icon); toast('⚔️ 검 획득! 공격 +2');
+  } else if(kind==='wand'){
+    player.attack += 2; addItem(def.name, def.icon); toast('🪄 마법봉 획득! 공격 +2');
+  }
+  sfx(660,0.08);
+}
+
+// ===================== EXP / 레벨 / 전직 =====================
+function gainExp(n){
+  player.exp += n;
+  while(player.exp >= player.expNext){
+    player.exp -= player.expNext;
+    levelUp();
+  }
+}
+function levelUp(){
+  player.level++;
+  player.expNext = Math.round(12 * Math.pow(1.35, player.level-1));
+  player.maxHp += 15; player.hp = player.maxHp;
+  player.attack += 3;
+  spawnParticles(player.x,player.y,'#c48bff',24);
+  toast('⬆️ 레벨 '+player.level+'!');
+  sfx(700,0.12); setTimeout(()=>sfx(920,0.12),90);
+  if(player.level>=5 && player.job==='none') openJobChange();
+}
+
+function openJobChange(){
+  GAME.state='jobchange';
+  document.getElementById('jobchange').classList.add('show');
+}
+function chooseJob(job){
+  player.job = job;
+  player.skillCdMax = job==='mage'?0.7:0.6;
+  document.getElementById('jobchange').classList.remove('show');
+  GAME.state='playing';
+  if(job==='mage'){
+    document.getElementById('skillName').textContent='⚡ 번개';
+    player.attack += 4;
+    toast('🔮 마법사로 전직! 번개 능력 획득');
+  } else {
+    document.getElementById('skillName').textContent='⚔️ 칼 내려찍기';
+    player.maxHp += 30; player.hp = player.maxHp; player.attack += 2;
+    toast('⚔️ 전사로 전직! 내려찍기 획득');
+  }
+  document.getElementById('jobBadge').textContent = job==='mage'?'마법사':'전사';
+  document.getElementById('jobBadge').style.color = job==='mage'?'var(--mage)':'var(--warrior)';
+  sfx(600,0.15); setTimeout(()=>sfx(880,0.2),120);
+}
+
+// ===================== 스킬 클래시 (QTE) =====================
+const qte = { active:false, bar:50, time:10, prompt:'W', target:null, resolved:false };
+function startClash(target){
+  qte.active=true; qte.bar=50; qte.time=10; qte.resolved=false;
+  qte.target=target; qte.prompt=pick(['W','A','S','D']);
+  GAME.state='qte';
+  const ov = document.getElementById('qte');
+  ov.classList.add('show');
+  updateQteUI();
+  sfx(500,0.1,'square'); setTimeout(()=>sfx(700,0.1,'square'),100);
+}
+function qteInput(key){
+  if(!qte.active || qte.resolved) return;
+  if(key === qte.prompt){ qte.bar += 11; sfx(760,0.05); }
+  else { qte.bar -= 9; sfx(200,0.06,'sawtooth'); }
+  qte.bar = clamp(qte.bar, 0, 100);
+  // 다음 키 (직전과 다르게)
+  let nk; do{ nk = pick(['W','A','S','D']); } while(nk===qte.prompt);
+  qte.prompt = nk;
+  if(qte.bar>=100) endClash(true);
+  else if(qte.bar<=0) endClash(false);
+  else updateQteUI();
+}
+function updateQteClock(dt){
+  if(!qte.active || qte.resolved) return;
+  qte.bar -= 4*dt;             // 가만히 있으면 서서히 감소(압박)
+  qte.time -= dt;
+  if(qte.bar<=0){ endClash(false); return; }
+  if(qte.time<=0){ endClash(qte.bar>50); return; }
+  updateQteUI();
+}
+function updateQteUI(){
+  const bar = document.getElementById('qteBar');
+  bar.style.width = qte.bar + '%';
+  bar.classList.toggle('good', qte.bar>=50);
+  document.getElementById('qteKey').textContent = qte.prompt;
+  document.getElementById('qteTimer').textContent = Math.max(0,qte.time).toFixed(1)+'초';
+}
+function endClash(win){
+  qte.resolved=true; qte.active=false;
+  document.getElementById('qte').classList.remove('show');
+  GAME.state='playing';
+  const t = qte.target;
+  if(win){
+    toast('⚡ 클래시 승리! 강타!');
+    addShake(10);
+    if(t && monsters.includes(t)){
+      effects.push({type:'lightning', x1:player.x,y1:player.y-10,x2:t.x,y2:t.y,life:0.3,max:0.3});
+      t.takeDamage(t.hp + 999, true); // 처치
+    }
+    sfx(880,0.15); setTimeout(()=>sfx(1100,0.15),100);
+  } else {
+    toast('💫 클래시 패배! 기절!');
+    player.stun = 2.5;
+    damagePlayer(18);
+    sfx(160,0.3,'sawtooth');
+  }
+  qte.target=null;
+}
+
+// ===================== 플레이어 피격 =====================
+function damagePlayer(dmg){
+  player.hp -= dmg;
+  player.hitFlash = 0.2;
+  addShake(5);
+  floats.push({x:player.x, y:player.y-30, text:'-'+Math.round(dmg), life:0.7, vy:-40, color:'#ff6b6b', size:16});
+  sfx(220,0.08,'sawtooth');
+  if(player.hp<=0){ player.hp=0; gameOver(); }
+}
+function gameOver(){
+  GAME.state='gameover';
+  document.getElementById('goStat').textContent =
+    `도달 레벨 ${player.level} · 처치 ${GAME.kills}마리 · 시간 ${Math.floor(GAME.time)}초`;
+  document.getElementById('gameover').classList.add('show');
+}
+
+// ===================== 이펙트 / 파티클 =====================
+function spawnParticles(x,y,color,n){
+  for(let i=0;i<n;i++){
+    const a=rand(0,6.28), s=rand(40,180);
+    particles.push({x,y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:rand(0.3,0.6), color, r:rand(2,4)});
+  }
+}
+let shake=0, screenFlash=0;
+function addShake(v){ shake = Math.min(shake+v, 16); }
+
+// ===================== 사운드 (WebAudio) =====================
+let actx=null;
+function sfx(freq, dur, type='sine'){
+  if(!GAME.sound) return;
+  try{
+    if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
+    const o=actx.createOscillator(), g=actx.createGain();
+    o.type=type; o.frequency.value=freq;
+    g.gain.setValueAtTime(0.06, actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime+dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(); o.stop(actx.currentTime+dur);
+  }catch(e){}
+}
+
+// ===================== 토스트 =====================
+function toast(msg){
+  const el=document.createElement('div'); el.className='toast'; el.textContent=msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(()=>{ el.style.transition='opacity .4s'; el.style.opacity='0';
+    setTimeout(()=>el.remove(),400); }, 1400);
+}
+
+// ===================== 오버레이 열고닫기 =====================
+function openInventory(){ GAME.state='inventory'; renderInventory();
+  document.getElementById('inventory').classList.add('show'); }
+function closeInventory(){ GAME.state='playing';
+  document.getElementById('inventory').classList.remove('show'); }
+function openSettings(){ GAME.state='settings';
+  document.getElementById('killStat').textContent=GAME.kills;
+  document.getElementById('timeStat').textContent=Math.floor(GAME.time)+'초';
+  document.getElementById('sndState').textContent=GAME.sound?'켜짐':'꺼짐';
+  document.getElementById('settings').classList.add('show'); }
+function closeSettings(){ GAME.state='playing';
+  document.getElementById('settings').classList.remove('show'); }
+
+function renderInventory(){
+  const grid=document.getElementById('invGrid');
+  grid.innerHTML='';
+  const items=Object.entries(inventory);
+  const slots=Math.max(12, items.length);
+  for(let i=0;i<slots;i++){
+    const s=document.createElement('div'); s.className='slot';
+    if(items[i]){
+      const [name,it]=items[i];
+      s.innerHTML=`<div class="ic">${it.icon}</div><div class="ct">${it.count}</div>`;
+      s.title=name;
+    } else { s.classList.add('empty'); }
+    grid.appendChild(s);
+  }
+}
+
+// ===================== 게임 시작 / 리셋 =====================
+function startGame(){
+  Object.assign(player, {
+    x:WORLD.w/2, y:WORLD.h/2, hp:100, maxHp:100, stamina:100, maxStamina:100,
+    level:1, exp:0, expNext:12, job:'none', attack:10, mageCharge:0, z:0, vz:0,
+    invuln:0, stun:0, dashCd:0, dashTime:0, skillCd:0, skillCdMax:0.5, hitFlash:0,
+    face:{x:0,y:1},
+  });
+  screenFlash=0;
+  monsters=[]; drops=[]; effects=[]; floats=[]; particles=[];
+  for(const k in inventory) delete inventory[k];
+  GAME.time=0; GAME.kills=0;
+  GAME.state='playing';
+  document.getElementById('jobBadge').textContent='모험가';
+  document.getElementById('jobBadge').style.color='var(--ink)';
+  document.getElementById('skillName').textContent='기본 공격';
+  ['title','gameover','jobchange','inventory','settings','qte'].forEach(id=>
+    document.getElementById(id).classList.remove('show'));
+  for(let i=0;i<6;i++) spawnMonster();
+  if(actx && actx.state==='suspended') actx.resume();
+}
+
+// 버튼 이벤트
+document.getElementById('startBtn').onclick=startGame;
+document.getElementById('reviveBtn').onclick=startGame;
+document.getElementById('restartBtn').onclick=startGame;
+document.getElementById('resumeBtn').onclick=closeSettings;
+document.getElementById('invClose').onclick=closeInventory;
+document.getElementById('pickMage').onclick=()=>chooseJob('mage');
+document.getElementById('pickWarrior').onclick=()=>chooseJob('warrior');
+document.getElementById('sndBtn').onclick=()=>{
+  GAME.sound=!GAME.sound;
+  document.getElementById('sndState').textContent=GAME.sound?'켜짐':'꺼짐';
+  document.getElementById('sndBtn').textContent=GAME.sound?'사운드 끄기':'사운드 켜기';
+};
+
+// ===================== 업데이트 =====================
+let spawnTimer=0;
+function update(dt){
+  GAME.time += dt;
+  // 타이머류는 상태 무관 진행할 필요 있는 것만
+  if(GAME.state==='qte'){ updateQteClock(dt); return; }
+  if(GAME.state!=='playing') return;
+
+  // 쿨다운
+  if(player.dashCd>0) player.dashCd-=dt;
+  if(player.skillCd>0) player.skillCd-=dt;
+  if(player.invuln>0) player.invuln-=dt;
+  if(player.hitFlash>0) player.hitFlash-=dt;
+  if(player.stun>0){ player.stun-=dt; }
+
+  // 이동
+  if(player.stun<=0){
+    if(player.dashTime>0){
+      player.dashTime-=dt;
+      player.x += player.dashDir.x*620*dt;
+      player.y += player.dashDir.y*620*dt;
+    } else {
+      const d=getMoveDir();
+      if(d.x||d.y) player.face={x:d.x,y:d.y};
+      const running=(keys['ShiftLeft']||keys['ShiftRight']) && player.stamina>0 && (d.x||d.y);
+      const spd=player.speed*(running?1.7:1);
+      player.x += d.x*spd*dt;
+      player.y += d.y*spd*dt;
+      if(running) player.stamina-=22*dt;
+      else player.stamina+=14*dt;
+      player.stamina=clamp(player.stamina,0,player.maxStamina);
+    }
+    player.x=clamp(player.x, player.r, WORLD.w-player.r);
+    player.y=clamp(player.y, player.r, WORLD.h-player.r);
+  }
+
+  // 점프(높이)
+  if(player.z>0 || player.vz!==0){
+    player.vz -= 1400*dt;
+    player.z += player.vz*dt;
+    if(player.z<=0){ player.z=0; player.vz=0; }
+  }
+
+  // 몬스터
+  for(const m of monsters) m.update(dt);
+  // 스폰
+  spawnTimer-=dt;
+  if(spawnTimer<=0){ spawnMonster(); spawnTimer=rand(2.2,3.8); }
+
+  updateDrops(dt);
+
+  // 이펙트/파티클/데미지숫자
+  for(let i=effects.length-1;i>=0;i--){ effects[i].life-=dt; if(effects[i].life<=0) effects.splice(i,1); }
+  for(let i=floats.length-1;i>=0;i--){ const f=floats[i]; f.life-=dt; f.y+=f.vy*dt; f.vy*=0.92; if(f.life<=0) floats.splice(i,1); }
+  for(let i=particles.length-1;i>=0;i--){ const p=particles[i]; p.life-=dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=0.9; p.vy*=0.9; if(p.life<=0) particles.splice(i,1); }
+  if(shake>0) shake=Math.max(0, shake-30*dt);
+  if(screenFlash>0) screenFlash=Math.max(0, screenFlash-dt*1.4);
+
+  // 카메라
+  camera.x=clamp(player.x-W/2, 0, WORLD.w-W);
+  camera.y=clamp(player.y-H/2, 0, WORLD.h-H);
+
+  updateHUD();
+}
+
+function updateHUD(){
+  document.getElementById('lvBadge').textContent='Lv '+player.level;
+  const hp=Math.max(0,player.hp);
+  document.getElementById('hpFill').style.width=(hp/player.maxHp*100)+'%';
+  document.getElementById('hpTxt').textContent=Math.round(hp)+'/'+player.maxHp;
+  document.getElementById('stamFill').style.width=(player.stamina/player.maxStamina*100)+'%';
+  document.getElementById('expFill').style.width=(player.exp/player.expNext*100)+'%';
+  document.getElementById('expTxt').textContent='EXP '+Math.floor(player.exp)+'/'+player.expNext;
+  const cd=player.skillCd;
+  document.getElementById('skillCd').textContent = cd>0 ? '쿨타임 '+cd.toFixed(1)+'초' :
+    (player.dashCd>0 ? '대쉬 '+player.dashCd.toFixed(1)+'초' : '준비됨');
+  const chg=document.getElementById('skillCharge');
+  if(player.job==='mage'){
+    const n=player.mageCharge;
+    chg.textContent = n>=6 ? '⚡ 초광역 준비 완료!' : '⚡ 충전 '+n+'/7';
+    chg.style.color = n>=6 ? 'var(--gold)' : 'var(--exp)';
+  } else { chg.textContent=''; }
+}
+
+// ===================== 렌더 =====================
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.save();
+  const sx = (shake>0? rand(-shake,shake):0), sy=(shake>0? rand(-shake,shake):0);
+  ctx.translate(-camera.x+sx, -camera.y+sy);
+
+  drawGround();
+
+  // 드롭
+  for(const d of drops){
+    const yy=d.y+Math.sin(d.bob)*4;
+    ctx.globalAlpha = d.life<3? (Math.sin(GAME.time*10)*0.4+0.6):1;
+    ctx.font='26px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    // 반짝임 원
+    ctx.beginPath(); ctx.arc(d.x,d.y+14,14,0,6.28); ctx.fillStyle='#ffffff22'; ctx.fill();
+    ctx.fillText(ITEM_DEF[d.kind].icon, d.x, yy);
+    ctx.globalAlpha=1;
+  }
+
+  // 몬스터
+  for(const m of monsters) drawMonster(m);
+
+  // 플레이어
+  drawPlayer();
+
+  // 이펙트
+  for(const e of effects) drawEffect(e);
+
+  // 파티클
+  for(const p of particles){
+    ctx.globalAlpha=clamp(p.life*2,0,1);
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,6.28); ctx.fillStyle=p.color; ctx.fill();
+  }
+  ctx.globalAlpha=1;
+
+  // 데미지 숫자
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(const f of floats){
+    ctx.globalAlpha=clamp(f.life*1.4,0,1);
+    ctx.font='bold '+(f.size||15)+'px Pretendard,sans-serif';
+    ctx.fillStyle=f.color; ctx.strokeStyle='#000'; ctx.lineWidth=3;
+    ctx.strokeText(f.text,f.x,f.y); ctx.fillText(f.text,f.x,f.y);
+  }
+  ctx.globalAlpha=1;
+  ctx.restore();
+
+  // 초광역 스킬 화면 섬광
+  if(screenFlash>0){
+    ctx.fillStyle='rgba(180,220,255,'+Math.min(screenFlash,0.7)+')';
+    ctx.fillRect(0,0,W,H);
+  }
+}
+
+function drawGround(){
+  // 잔디 배경 + 격자
+  const x0=Math.floor(camera.x/80)*80, y0=Math.floor(camera.y/80)*80;
+  ctx.fillStyle='#12281b';
+  ctx.fillRect(camera.x, camera.y, W, H);
+  ctx.strokeStyle='#1c3a27'; ctx.lineWidth=1;
+  for(let x=x0; x<camera.x+W+80; x+=80){
+    ctx.beginPath(); ctx.moveTo(x,camera.y); ctx.lineTo(x,camera.y+H); ctx.stroke();
+  }
+  for(let y=y0; y<camera.y+H+80; y+=80){
+    ctx.beginPath(); ctx.moveTo(camera.x,y); ctx.lineTo(camera.x+W,y); ctx.stroke();
+  }
+  // 월드 경계
+  ctx.strokeStyle='#3a5a40'; ctx.lineWidth=6;
+  ctx.strokeRect(0,0,WORLD.w,WORLD.h);
+}
+
+function drawShadow(x,y,r){
+  ctx.beginPath(); ctx.ellipse(x,y,r,r*0.45,0,0,6.28);
+  ctx.fillStyle='#00000044'; ctx.fill();
+}
+
+function drawPlayer(){
+  const px=player.x, py=player.y - player.z; // 점프 높이 반영
+  drawShadow(player.x, player.y+player.r*0.7, player.r*(1 - player.z*0.0006));
+  ctx.save();
+  if(player.hitFlash>0 && Math.floor(GAME.time*20)%2===0) ctx.globalAlpha=0.4;
+  if(player.stun>0 && Math.floor(GAME.time*12)%2===0) ctx.globalAlpha=0.6;
+
+  const col = player.job==='mage'?'#6db4ff' : player.job==='warrior'?'#ff8a5c' : '#eef0ff';
+  // 몸
+  ctx.beginPath(); ctx.arc(px,py,player.r,0,6.28);
+  ctx.fillStyle=col; ctx.fill();
+  ctx.lineWidth=3; ctx.strokeStyle='#00000055'; ctx.stroke();
+  // 눈(바라보는 방향)
+  const fx=player.face.x, fy=player.face.y;
+  ctx.beginPath(); ctx.arc(px+fx*7-2, py+fy*7, 3,0,6.28);
+  ctx.arc(px+fx*7+4, py+fy*7, 3,0,6.28); ctx.fillStyle='#1a1d33'; ctx.fill();
+  // 직업 심볼
+  ctx.font='16px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(player.job==='mage'?'🔮':player.job==='warrior'?'⚔️':'🧭', px, py-player.r-10);
+  // 기절 표시
+  if(player.stun>0){ ctx.font='16px serif'; ctx.fillText('💫', px, py-player.r-26); }
+  ctx.restore();
+}
+
+function drawMonster(m){
+  drawShadow(m.x, m.y+m.r*0.7, m.r);
+  ctx.save();
+  if(m.hitFlash>0){ ctx.fillStyle='#fff'; }
+  else ctx.fillStyle = m.elite? '#b45cff' : '#e5556b';
+  ctx.beginPath(); ctx.arc(m.x,m.y,m.r,0,6.28); ctx.fill();
+  ctx.lineWidth=3; ctx.strokeStyle='#00000055'; ctx.stroke();
+  // 눈
+  ctx.fillStyle='#1a0e14';
+  ctx.beginPath(); ctx.arc(m.x-m.r*0.35,m.y-m.r*0.15,m.r*0.16,0,6.28);
+  ctx.arc(m.x+m.r*0.35,m.y-m.r*0.15,m.r*0.16,0,6.28); ctx.fill();
+  ctx.restore();
+  // 엘리트 왕관
+  if(m.elite){ ctx.font=Math.round(m.r)+'px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('👑', m.x, m.y-m.r-8); }
+  // HP 바
+  if(m.hp<m.maxHp){
+    const bw=m.r*2.2, bx=m.x-bw/2, by=m.y-m.r-14;
+    ctx.fillStyle='#000000aa'; ctx.fillRect(bx,by,bw,5);
+    ctx.fillStyle= m.elite?'#d08bff':'#ff6b6b';
+    ctx.fillRect(bx,by, bw*clamp(m.hp/m.maxHp,0,1), 5);
+  }
+}
+
+function drawEffect(e){
+  if(e.type==='lightning'){
+    const a=e.life/e.max;
+    ctx.strokeStyle='rgba(160,210,255,'+a+')'; ctx.lineWidth=4; ctx.lineCap='round';
+    ctx.shadowColor='#6db4ff'; ctx.shadowBlur=16;
+    drawBolt(e.x1,e.y1,e.x2,e.y2);
+    ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,'+a+')';
+    drawBolt(e.x1,e.y1,e.x2,e.y2);
+    ctx.shadowBlur=0;
+  } else if(e.type==='slam'){
+    const t=1-e.life/e.max; const r=e.r+ (e.maxR-e.r)*t;
+    ctx.strokeStyle='rgba(255,150,90,'+(1-t)+')'; ctx.lineWidth=6;
+    ctx.beginPath(); ctx.arc(e.x,e.y,r,0,6.28); ctx.stroke();
+    ctx.fillStyle='rgba(255,180,120,'+(0.3*(1-t))+')';
+    ctx.beginPath(); ctx.arc(e.x,e.y,r,0,6.28); ctx.fill();
+  } else if(e.type==='slash'){
+    const a=e.life/e.max;
+    ctx.strokeStyle='rgba(255,255,255,'+a+')'; ctx.lineWidth=5; ctx.lineCap='round';
+    ctx.beginPath(); ctx.arc(e.x,e.y,30, e.ang-1, e.ang+1); ctx.stroke();
+  }
+}
+function drawBolt(x1,y1,x2,y2){
+  const seg=6; ctx.beginPath(); ctx.moveTo(x1,y1);
+  for(let i=1;i<seg;i++){
+    const t=i/seg;
+    const x=x1+(x2-x1)*t + rand(-12,12);
+    const y=y1+(y2-y1)*t + rand(-12,12);
+    ctx.lineTo(x,y);
+  }
+  ctx.lineTo(x2,y2); ctx.stroke();
+}
+
+// ===================== 메인 루프 =====================
+let last=performance.now();
+function loop(now){
+  let dt=(now-last)/1000; last=now;
+  dt=Math.min(dt, 0.05); // 큰 프레임 스킵 방지
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
