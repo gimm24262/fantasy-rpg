@@ -910,6 +910,30 @@ function draw(){
     ctx.fillStyle='rgba(180,220,255,'+Math.min(screenFlash,0.7)+')';
     ctx.fillRect(0,0,W,H);
   }
+
+  drawMinimap();
+}
+
+// 미니맵 (팀원1 담당 — 화면/HUD): 우하단에 월드 전체를 축소 표시
+function drawMinimap(){
+  if(GAME.state==='title' || GAME.state==='gameover') return;
+  const mw=140, mh=Math.round(mw*WORLD.h/WORLD.w), pad=12;
+  const ox=W-mw-pad, oy=H-mh-28;
+  ctx.save();
+  ctx.globalAlpha=0.82;
+  ctx.fillStyle='#0a0e1c'; ctx.fillRect(ox,oy,mw,mh);
+  ctx.globalAlpha=1;
+  ctx.strokeStyle='#3a3f66'; ctx.lineWidth=1.5; ctx.strokeRect(ox,oy,mw,mh);
+  const sx=mw/WORLD.w, sy=mh/WORLD.h;
+  const put=(x,y,c,r)=>{ ctx.fillStyle=c; ctx.beginPath(); ctx.arc(ox+x*sx, oy+y*sy, r, 0, 6.28); ctx.fill(); };
+  for(const d of drops) put(d.x, d.y, '#f4c95d', 1.6);
+  for(const m of monsters) put(m.x, m.y, m.elite?'#b45cff':'#e5556b', m.elite?2.6:1.9);
+  put(player.x, player.y, '#ffffff', 3);
+  ctx.strokeStyle='#6db4ff'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(ox+player.x*sx, oy+player.y*sy, 4.5, 0, 6.28); ctx.stroke();
+  ctx.fillStyle='#9aa0c8'; ctx.font='9px Pretendard,sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('미니맵', ox+4, oy+3);
+  ctx.restore();
 }
 
 function drawGround(){
